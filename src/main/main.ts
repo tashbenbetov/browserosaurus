@@ -1,3 +1,4 @@
+import { exec } from 'child_process'
 import {
   app,
   autoUpdater,
@@ -50,6 +51,30 @@ const store = new Store()
 let urlToOpen: string | undefined // if started via clicking link
 let appReady: boolean // if started via clicking link
 let tray: Tray // prevents garbage collection
+const contextMenu: MenuItemConstructorOptions[] = [
+  {
+    label: 'URL History',
+    submenu: [{ label: 'Empty', enabled: false }],
+  },
+  {
+    label: 'Favourite',
+    submenu: [{ label: 'Loading...' }],
+  },
+  {
+    type: 'separator',
+  },
+  {
+    label: 'Quit',
+    click: () => app.exit(),
+  },
+  {
+    type: 'separator',
+  },
+  {
+    label: 'v' + app.getVersion(),
+    enabled: false,
+  },
+]
 let pickerWindow: BrowserWindow // Prevents garbage collection
 let isOptHeld = false
 
@@ -111,6 +136,15 @@ const urlRecevied = (url: string) => {
   pickerWindow.setSize(width, height, false)
   pickerWindow.webContents.send(URL_RECEIVED, url)
   pickerWindow.show()
+  // Add URL to history:
+  if ((contextMenu[0].submenu as MenuItemConstructorOptions[])[0] === 'Empty') {
+    contextMenu[0].submenu = []
+  }
+  ;(contextMenu[0].submenu as MenuItemConstructorOptions[]).push({
+    label: url,
+    click: () => exec(`open ${url}`),
+  })
+  tray.setContextMenu(Menu.buildFromTemplate(contextMenu))
 }
 
 ipcMain.on(BROWSER_RUN, (_: Event, name: BrowserName) => {
@@ -180,26 +214,6 @@ app.on('ready', async () => {
   tray = new Tray(`${__dirname}/static/icon/tray_iconTemplate.png`)
   tray.setPressedImage(`${__dirname}/static/icon/tray_iconHighlight.png`)
   tray.setToolTip('Browserosaurus')
-  const contextMenu: MenuItemConstructorOptions[] = [
-    {
-      label: 'Favourite',
-      submenu: [{ label: 'Loading...' }],
-    },
-    {
-      type: 'separator',
-    },
-    {
-      label: 'Quit',
-      click: () => app.exit(),
-    },
-    {
-      type: 'separator',
-    },
-    {
-      label: 'v' + app.getVersion(),
-      enabled: false,
-    },
-  ]
   tray.setContextMenu(Menu.buildFromTemplate(contextMenu))
 
   await createPickerWindow()
@@ -209,7 +223,7 @@ app.on('ready', async () => {
   )
 
   // update fav-chooser with browser list
-  contextMenu[0].submenu = Menu.buildFromTemplate([
+  contextMenu[1].submenu = [
     ...(browserNames.map(browserName => ({
       checked: browserName === fav,
       label: browserName,
@@ -219,7 +233,7 @@ app.on('ready', async () => {
         pickerWindow.webContents.send(FAV_SET, browserName)
       },
     })) as MenuItemConstructorOptions[]),
-  ])
+  ]
 
   // reapply tray menu
   tray.setContextMenu(Menu.buildFromTemplate(contextMenu))
@@ -247,7 +261,7 @@ app.on('ready', async () => {
     autoUpdater.on('update-downloaded', () => {
       tray.setImage(`${__dirname}/static/icon/tray_iconBlue.png`)
 
-      contextMenu[2] = {
+      contextMenu[3] = {
         label: 'Install Update',
         click: () => autoUpdater.quitAndInstall(),
       }
